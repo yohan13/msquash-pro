@@ -1,0 +1,73 @@
+version: "3.9"
+
+# =====================================================
+# M Squash Pro — docker-compose
+# Usage : docker-compose up -d
+# =====================================================
+
+services:
+
+  # ─── Backend API ────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: msquash-backend
+    restart: unless-stopped
+    environment:
+      PORT:                  4000
+      JWT_SECRET:            ${JWT_SECRET:-change-me-in-production}
+      JWT_EXPIRES_IN:        ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN:           ${CORS_ORIGIN:-http://localhost:3000}
+      CLUB_NAME:             ${CLUB_NAME:-M Squash}
+      DAY_START:             ${DAY_START:-08:00}
+      DAY_END:               ${DAY_END:-22:00}
+      SLOT_MINUTES:          ${SLOT_MINUTES:-45}
+      COURTS:                ${COURTS:-4}
+      MAX_FUTURE_BOOKINGS:   ${MAX_FUTURE_BOOKINGS:-2}
+      MAX_DAYS_AHEAD:        ${MAX_DAYS_AHEAD:-14}
+      UNIQUE_PER_TIMESLOT:   ${UNIQUE_PER_TIMESLOT:-true}
+      ADMIN_SEED_EMAIL:      ${ADMIN_SEED_EMAIL:-admin@club.local}
+      ADMIN_SEED_PASSWORD:   ${ADMIN_SEED_PASSWORD:-admin1234}
+      ADMIN_SEED_NAME:       ${ADMIN_SEED_NAME:-Club Admin}
+      NODE_ENV:              production
+      DB_DIR:                /app/data
+    volumes:
+      - db_data:/app/data
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    networks:
+      - msquash-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ─── Frontend (Vite build → nginx) ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL:    ${VITE_API_URL:-http://localhost:4000}
+        VITE_CLUB_NAME:  ${CLUB_NAME:-M Squash}
+        VITE_TAGLINE:    ${VITE_TAGLINE:-Club • Food • Sports}
+        VITE_PRIMARY:    ${VITE_PRIMARY:-#0a6bdc}
+    container_name: msquash-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks:
+      - msquash-net
+
+volumes:
+  db_data:
+    driver: local
+
+networks:
+  msquash-net:
+    driver: bridge

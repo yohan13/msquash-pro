@@ -1,14 +1,148 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-function authHeader(){ const t=localStorage.getItem('token'); return t? {'Authorization':`Bearer ${t}`} : {}; }
-export async function register(p){ const r=await fetch(`${API_URL}/api/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}); const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'register_failed'); return j; }
-export async function login(p){ const r=await fetch(`${API_URL}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}); const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'login_failed'); return j; }
-export async function me(){ const r=await fetch(`${API_URL}/api/auth/me`,{headers:{...authHeader()}}); const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'unauthorized'); return j; }
-export async function getConfig(){ const r=await fetch(`${API_URL}/api/config`); if(!r.ok) throw new Error('config'); return r.json(); }
-export async function getDay(date){ const u=new URL(`${API_URL}/api/slots`); u.searchParams.set('date',date); const r=await fetch(u); if(!r.ok) throw new Error('slots'); return r.json(); }
-export async function createBooking(p){ const r=await fetch(`${API_URL}/api/bookings`,{method:'POST',headers:{'Content-Type':'application/json',...authHeader()},body:JSON.stringify(p)}); const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'create_failed'); return j; }
-export async function deleteBooking(id){ const r=await fetch(`${API_URL}/api/bookings/${id}`,{method:'DELETE',headers:{...authHeader(),'Content-Type':'application/json'},body:JSON.stringify({})}); const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'delete_failed'); return j; }
-export async function createBlock(p){ const r=await fetch(`${API_URL}/api/blocks`,{method:'POST',headers:{'Content-Type':'application/json',...authHeader()},body:JSON.stringify(p)}); const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'block_failed'); return j; }
-export async function deleteBlock(id){ const r=await fetch(`${API_URL}/api/blocks/${id}`,{method:'DELETE',headers:{...authHeader()}}); const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'unblock_failed'); return j; }
-export async function myBookings(){ const r=await fetch(`${API_URL}/api/my/bookings`,{headers:{...authHeader()}}); const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||'mybookings_failed'); return j; }
-export async function exportCSV(from,to){ const u=new URL(`${API_URL}/api/export/csv`); if(from) u.searchParams.set('from',from); if(to) u.searchParams.set('to',to); const r=await fetch(u,{headers:{...authHeader()}}); if(!r.ok) throw new Error('export_failed'); const blob=await r.blob(); return blob; }
-export function bookingICSUrl(id){ const u=new URL(`${API_URL}/api/bookings/${id}/ics`); return u.toString(); }
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+
+function authHeader() {
+  const t = localStorage.getItem('token')
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
+
+async function request(url, options = {}) {
+  let res
+  try {
+    res = await fetch(url, options)
+  } catch {
+    throw new Error('NETWORK_ERROR')
+  }
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || `HTTP_${res.status}`)
+  return json
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+export function register(payload) {
+  return request(`${API_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function login(payload) {
+  return request(`${API_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function me() {
+  return request(`${API_URL}/api/auth/me`, { headers: authHeader() })
+}
+
+export function updateProfile(payload) {
+  return request(`${API_URL}/api/auth/me`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify(payload),
+  })
+}
+
+// ─── Config & Slots ───────────────────────────────────────────────────────────
+
+export function getConfig() {
+  return request(`${API_URL}/api/config`)
+}
+
+export function getDay(date) {
+  return request(`${API_URL}/api/slots?date=${encodeURIComponent(date)}`)
+}
+
+// ─── Bookings ─────────────────────────────────────────────────────────────────
+
+export function createBooking(payload) {
+  return request(`${API_URL}/api/bookings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteBooking(id) {
+  return request(`${API_URL}/api/bookings/${id}`, {
+    method: 'DELETE',
+    headers: authHeader(),
+  })
+}
+
+export function myBookings() {
+  return request(`${API_URL}/api/my/bookings`, { headers: authHeader() })
+}
+
+export function bookingICSUrl(id) {
+  return `${API_URL}/api/bookings/${id}/ics?token=${localStorage.getItem('token') || ''}`
+}
+
+// ─── Admin — Blocks ───────────────────────────────────────────────────────────
+
+export function createBlock(payload) {
+  return request(`${API_URL}/api/blocks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteBlock(id) {
+  return request(`${API_URL}/api/blocks/${id}`, {
+    method: 'DELETE',
+    headers: authHeader(),
+  })
+}
+
+// ─── Admin — CSV Export ───────────────────────────────────────────────────────
+
+export async function exportCSV(from, to) {
+  const u = new URL(`${API_URL}/api/admin/export/csv`)
+  if (from) u.searchParams.set('from', from)
+  if (to)   u.searchParams.set('to', to)
+  let res
+  try { res = await fetch(u, { headers: authHeader() }) }
+  catch { throw new Error('NETWORK_ERROR') }
+  if (!res.ok) throw new Error('EXPORT_FAILED')
+  return res.blob()
+}
+
+// ─── Admin — Users ────────────────────────────────────────────────────────────
+
+export function adminGetUsers() {
+  return request(`${API_URL}/api/admin/users`, { headers: authHeader() })
+}
+
+export function adminUpdateRole(userId, role) {
+  return request(`${API_URL}/api/admin/users/${userId}/role`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify({ role }),
+  })
+}
+
+export function adminResetPassword(userId, newPassword) {
+  return request(`${API_URL}/api/admin/users/${userId}/password`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify({ newPassword }),
+  })
+}
+
+export function adminDeleteUser(userId) {
+  return request(`${API_URL}/api/admin/users/${userId}`, {
+    method: 'DELETE',
+    headers: authHeader(),
+  })
+}
+
+// ─── Admin — Stats ────────────────────────────────────────────────────────────
+
+export function adminGetStats() {
+  return request(`${API_URL}/api/admin/stats`, { headers: authHeader() })
+}

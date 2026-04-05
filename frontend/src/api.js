@@ -159,6 +159,14 @@ export function mySubscriptions() {
   return request(`${API_URL}/api/my/subscriptions`, { headers: authHeader() })
 }
 
+export function buySubscription(cardType) {
+  return request(`${API_URL}/api/my/subscriptions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify({ cardType }),
+  })
+}
+
 export function adminGetSubscriptions() {
   return request(`${API_URL}/api/admin/subscriptions`, { headers: authHeader() })
 }

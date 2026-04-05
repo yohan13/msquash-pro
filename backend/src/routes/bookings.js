@@ -2,7 +2,7 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { selectOne, selectAll, run, saveDb, uid } from "../db.js";
 import { auth } from "../middleware/auth.js";
-import { config } from "../config.js";
+import { config, CARD_TYPES } from "../config.js";
 
 const router = Router();
 
@@ -133,6 +133,28 @@ router.get("/my/subscriptions", auth, (req, res) => {
     [req.user.sub]
   );
   res.json({ subscriptions: subs, today });
+});
+
+// POST /api/my/subscriptions  (achat simulé — pas de paiement réel)
+router.post("/my/subscriptions", auth, (req, res) => {
+  const { cardType } = req.body || {};
+  const card = CARD_TYPES[cardType];
+  if (!card) return res.status(400).json({ error: "INVALID_CARD_TYPE" });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const expiresAt = new Date(Date.now() + card.validMonths * 30 * 24 * 3600 * 1000)
+    .toISOString().slice(0, 10);
+
+  const id = uid("sub");
+  run(
+    `INSERT INTO subscriptions (id, user_id, card_type, total_units, used_units, purchased_at, expires_at)
+     VALUES (?, ?, ?, ?, 0, ?, ?)`,
+    [id, req.user.sub, cardType, card.units, new Date().toISOString(), expiresAt]
+  );
+  saveDb();
+
+  const sub = selectOne("SELECT * FROM subscriptions WHERE id = ?", [id]);
+  res.status(201).json({ subscription: sub });
 });
 
 // POST /api/bookings

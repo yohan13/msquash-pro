@@ -235,7 +235,7 @@ export default function Admin() {
   )
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-8 space-y-5">
+    <main className="max-w-7xl mx-auto px-4 py-8 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold">Administration</h1>
         <div className="toolbar flex-wrap">{tabBtn('calendar', '📅 Calendrier')}{tabBtn('stats', '📊 Statistiques')}{tabBtn('revenue', '💰 Revenus')}{tabBtn('users', '👥 Membres')}{tabBtn('subs', '🎫 Abonnements')}</div>

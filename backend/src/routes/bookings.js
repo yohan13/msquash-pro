@@ -106,7 +106,7 @@ router.get("/slots", (req, res) => {
 
   const bookings = selectAll(
     `SELECT b.id, b.date, b.time, b.court_id, b.user_id, b.note,
-            b.player2_id, b.player2_name,
+            b.player2_id, b.player2_name, b.booked_for_name,
             u.name  as user_name,
             p2.name as player2_member_name
      FROM bookings b
@@ -186,7 +186,8 @@ router.post("/my/subscriptions", auth, (req, res) => {
 
 // POST /api/bookings
 router.post("/bookings", auth, (req, res) => {
-  const { date, time, courtId, note, player2Id, player2Name, unitsPaid } = req.body || {};
+  const { date, time, courtId, note, player2Id, player2Name, unitsPaid,
+          forUserId, forGuestName } = req.body || {};
 
   if (!date || !isValidDateStr(date))
     return res.status(400).json({ error: "INVALID_DATE" });
@@ -194,18 +195,38 @@ router.post("/bookings", auth, (req, res) => {
     return res.status(400).json({ error: "INVALID_TIME" });
   if (!courtId || isNaN(parseInt(courtId)))
     return res.status(400).json({ error: "INVALID_COURT" });
-  if (!withinWindow(date))
-    return res.status(403).json({ error: "OUT_OF_WINDOW" });
+
+  const isAdminReq = req.user.role === "ADMIN";
+
+  // Déterminer pour qui on réserve (admin peut réserver pour un abonné ou un invité)
+  let effectiveUserId = req.user.sub;
+  let bookedForName   = null;
+  if (isAdminReq) {
+    if (forUserId) {
+      const target = selectOne("SELECT id FROM users WHERE id = ?", [forUserId]);
+      if (!target) return res.status(404).json({ error: "USER_NOT_FOUND" });
+      effectiveUserId = forUserId;
+    } else if (forGuestName?.trim()) {
+      bookedForName = forGuestName.trim();
+    }
+  }
+
+  // Vérifications toujours actives (unicité du créneau)
   if (selectOne("SELECT 1 FROM bookings WHERE date = ? AND time = ? AND court_id = ?", [date, time, courtId]))
     return res.status(409).json({ error: "ALREADY_BOOKED" });
   if (selectOne("SELECT 1 FROM blocks WHERE date = ? AND time = ? AND court_id = ?", [date, time, courtId]))
     return res.status(409).json({ error: "SLOT_BLOCKED" });
-  if (config.UNIQUE_PER_TIMESLOT && hasBookingSameTimeslot(req.user.sub, date, time))
-    return res.status(409).json({ error: "USER_ALREADY_BOOKED_THIS_TIMESLOT" });
 
-  const current = countFutureBookings(req.user.sub);
-  if (current >= config.MAX_FUTURE_BOOKINGS)
-    return res.status(403).json({ error: "BOOKING_LIMIT_REACHED" });
+  // Limites réservées aux membres (l'admin bypasse tout)
+  if (!isAdminReq) {
+    if (!withinWindow(date))
+      return res.status(403).json({ error: "OUT_OF_WINDOW" });
+    if (config.UNIQUE_PER_TIMESLOT && hasBookingSameTimeslot(effectiveUserId, date, time))
+      return res.status(409).json({ error: "USER_ALREADY_BOOKED_THIS_TIMESLOT" });
+    const current = countFutureBookings(effectiveUserId);
+    if (current >= config.MAX_FUTURE_BOOKINGS)
+      return res.status(403).json({ error: "BOOKING_LIMIT_REACHED" });
+  }
 
   // Valider player2 membre si fourni
   const resolvedPlayer2Id   = player2Id || null;
@@ -213,29 +234,27 @@ router.post("/bookings", auth, (req, res) => {
   if (resolvedPlayer2Id) {
     const p2 = selectOne("SELECT id FROM users WHERE id = ?", [resolvedPlayer2Id]);
     if (!p2) return res.status(400).json({ error: "PLAYER2_NOT_FOUND" });
-    if (resolvedPlayer2Id === req.user.sub)
+    if (resolvedPlayer2Id === effectiveUserId)
       return res.status(400).json({ error: "PLAYER2_SAME_AS_PLAYER1" });
   }
 
   const id = uid("b");
   run(
-    `INSERT INTO bookings (id, date, time, court_id, user_id, note, created_at, player2_id, player2_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, date, time, courtId, req.user.sub, note || null, new Date().toISOString(),
-     resolvedPlayer2Id, resolvedPlayer2Name]
+    `INSERT INTO bookings (id, date, time, court_id, user_id, note, created_at, player2_id, player2_name, booked_for_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, date, time, courtId, effectiveUserId, note || null, new Date().toISOString(),
+     resolvedPlayer2Id, resolvedPlayer2Name, bookedForName]
   );
 
-  // Déduction d'unités sur les abonnements
-  // unitsPaid: 0 (sans carte), 1 (je paie pour moi), 2 (je paie pour nous deux)
+  // Déduction d'unités (uniquement pour les abonnés — pas pour les invités admin)
   const units = parseInt(unitsPaid) || 0;
-  if (units > 0) {
-    const sub = getActiveSubscription(req.user.sub);
+  if (units > 0 && !bookedForName) {
+    const sub = getActiveSubscription(effectiveUserId);
     if (sub) {
       const toDeduct = Math.min(units, sub.total_units - sub.used_units);
       if (toDeduct > 0) deductUnits(id, sub.id, toDeduct);
     }
   }
-  // Si player2 est un membre et paie sa propre unité (unitsPaid = 1, partner split)
   if (units === 1 && resolvedPlayer2Id) {
     const sub2 = getActiveSubscription(resolvedPlayer2Id);
     if (sub2) deductUnits(id, sub2.id, 1);

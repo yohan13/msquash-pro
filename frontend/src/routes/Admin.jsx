@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { adminGetUsers, adminGetStats, adminUpdateRole, adminResetPassword, adminDeleteUser,
          adminGetSubscriptions, adminCreateSubscription, adminDeleteSubscription,
-         adminGetRevenue } from '../api'
+         adminGetRevenue, getConfig, getDay, createBooking, deleteBooking,
+         createBlock, deleteBlock } from '../api'
 import Banner from '../components/Banner'
 import Modal from '../components/Modal'
+import SlotGrid from '../components/SlotGrid'
 import { useBanner } from '../hooks/useBanner'
 
 export default function Admin() {
@@ -13,7 +15,7 @@ export default function Admin() {
   const navigate   = useNavigate()
   const { banner, setBanner, clearBanner } = useBanner()
 
-  const [tab, setTab]         = useState('stats')
+  const [tab, setTab]         = useState('calendar')
   const [stats, setStats]     = useState(null)
   const [users, setUsers]     = useState([])
   const [loading, setLoading] = useState(false)
@@ -31,6 +33,25 @@ export default function Admin() {
 
   // Revenue
   const [revenue, setRevenue] = useState(null)
+
+  // Calendar tab
+  const [calCfg, setCalCfg]         = useState(null)
+  const [calDate, setCalDate]       = useState(() => new Date().toISOString().slice(0, 10))
+  const [calDayData, setCalDayData] = useState({ bookings: [], blocks: [] })
+  const [calLoading, setCalLoading] = useState(false)
+  const [calMembers, setCalMembers] = useState([])
+  const [calReason, setCalReason]   = useState('')
+
+  // Admin booking modal
+  const [bookingSlot, setBookingSlot]         = useState(null) // { courtId, time }
+  const [bookingFor, setBookingFor]           = useState('member')
+  const [bookingUserId, setBookingUserId]     = useState('')
+  const [bookingGuestName, setBookingGuestName] = useState('')
+  const [bookingNote, setBookingNote]         = useState('')
+  const [bookingP2Mode, setBookingP2Mode]     = useState('none')
+  const [bookingP2Id, setBookingP2Id]         = useState('')
+  const [bookingP2Name, setBookingP2Name]     = useState('')
+  const [bookingBusy, setBookingBusy]         = useState(false)
 
   if (!user || user.role !== 'ADMIN') {
     navigate('/')
@@ -65,6 +86,98 @@ export default function Admin() {
     finally { setLoading(false) }
   }
 
+  async function loadCalendar(cfg) {
+    setCalLoading(true)
+    try {
+      const activeCfg = cfg || calCfg || await getConfig().then(c => { setCalCfg(c); return c })
+      if (!calCfg && activeCfg) setCalCfg(activeCfg)
+      const [dayData, membersData] = await Promise.all([
+        getDay(calDate),
+        calMembers.length ? Promise.resolve({ users: calMembers.map(m => ({ ...m, role: 'USER' })) }) : adminGetUsers(),
+      ])
+      setCalDayData(dayData)
+      if (!calMembers.length) setCalMembers((membersData.users || []).filter(u => u.role === 'USER'))
+    } catch { setBanner('error', 'Erreur chargement calendrier.') }
+    finally { setCalLoading(false) }
+  }
+
+  async function reloadCalDay() {
+    setCalLoading(true)
+    try { setCalDayData(await getDay(calDate)) }
+    catch { setBanner('error', 'Erreur chargement grille.') }
+    finally { setCalLoading(false) }
+  }
+
+  function changeCalDate(delta) {
+    const d = new Date(calDate + 'T12:00:00')
+    d.setDate(d.getDate() + delta)
+    setCalDate(d.toISOString().slice(0, 10))
+  }
+
+  function openBookingModal(courtId, time) {
+    setBookingSlot({ courtId, time })
+    setBookingFor('member')
+    setBookingUserId('')
+    setBookingGuestName('')
+    setBookingNote('')
+    setBookingP2Mode('none')
+    setBookingP2Id('')
+    setBookingP2Name('')
+  }
+
+  async function handleAdminBook() {
+    if (!bookingSlot) return
+    const { courtId, time } = bookingSlot
+    if (bookingFor === 'member' && !bookingUserId)
+      return setBanner('error', 'Sélectionnez un abonné.')
+    if (bookingFor === 'guest' && !bookingGuestName.trim())
+      return setBanner('error', 'Saisissez le nom du joueur.')
+    setBookingBusy(true)
+    try {
+      await createBooking({
+        date: calDate, time, courtId,
+        note: bookingNote.trim() || null,
+        forUserId:    bookingFor === 'member' ? bookingUserId : undefined,
+        forGuestName: bookingFor === 'guest'  ? bookingGuestName.trim() : undefined,
+        player2Id:   bookingP2Mode === 'member' ? bookingP2Id   : undefined,
+        player2Name: bookingP2Mode === 'guest'  ? bookingP2Name.trim() : undefined,
+        unitsPaid: 0,
+      })
+      setBookingSlot(null)
+      const name = bookingFor === 'guest'
+        ? bookingGuestName.trim()
+        : calMembers.find(m => m.id === bookingUserId)?.name || ''
+      setBanner('success', `Réservation créée pour ${name} — Court ${courtId} à ${time}`)
+      await reloadCalDay()
+    } catch (e) {
+      const msgs = {
+        ALREADY_BOOKED: 'Ce créneau est déjà pris.',
+        SLOT_BLOCKED:   'Ce créneau est bloqué.',
+        USER_NOT_FOUND: 'Abonné introuvable.',
+      }
+      setBanner('error', msgs[e.message] || e.message)
+    } finally { setBookingBusy(false) }
+  }
+
+  async function handleCalCancel(booking) {
+    try {
+      await deleteBooking(booking.id)
+      await reloadCalDay()
+      setBanner('success', 'Réservation annulée.')
+    } catch (e) { setBanner('error', e.message) }
+  }
+
+  async function handleCalToggleBlock(courtId, time) {
+    const bl = calDayData.blocks.find(b => b.court_id === courtId && b.time === time)
+    try {
+      if (bl) { await deleteBlock(bl.id); setBanner('success', 'Créneau débloqué.') }
+      else     { await createBlock({ date: calDate, time, courtId, reason: calReason.trim() || null }); setBanner('success', 'Créneau bloqué.') }
+      await reloadCalDay()
+    } catch (e) {
+      setBanner('error', e.message === 'BOOKING_EXISTS' ? 'Une réservation existe déjà sur ce créneau.' : e.message)
+    }
+  }
+
   async function loadRevenue() {
     setLoading(true)
     try { setRevenue(await adminGetRevenue()) }
@@ -73,11 +186,16 @@ export default function Admin() {
   }
 
   useEffect(() => {
-    if (tab === 'stats')    loadStats()
+    if      (tab === 'calendar') loadCalendar()
+    else if (tab === 'stats')    loadStats()
     else if (tab === 'users')    loadUsers()
     else if (tab === 'subs')     loadSubs()
     else if (tab === 'revenue')  loadRevenue()
   }, [tab])
+
+  useEffect(() => {
+    if (tab === 'calendar') reloadCalDay()
+  }, [calDate])
 
   async function handleRoleToggle(u) {
     const newRole = u.role === 'ADMIN' ? 'USER' : 'ADMIN'
@@ -120,7 +238,7 @@ export default function Admin() {
     <main className="max-w-5xl mx-auto px-4 py-8 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold">Administration</h1>
-        <div className="toolbar">{tabBtn('stats', '📊 Statistiques')}{tabBtn('revenue', '💰 Revenus')}{tabBtn('users', '👥 Membres')}{tabBtn('subs', '🎫 Abonnements')}</div>
+        <div className="toolbar flex-wrap">{tabBtn('calendar', '📅 Calendrier')}{tabBtn('stats', '📊 Statistiques')}{tabBtn('revenue', '💰 Revenus')}{tabBtn('users', '👥 Membres')}{tabBtn('subs', '🎫 Abonnements')}</div>
       </div>
 
       {banner && <Banner banner={banner} onClose={clearBanner} />}
@@ -134,6 +252,131 @@ export default function Admin() {
         onConfirm={handleDeleteConfirm}
         onCancel={() => setToDelete(null)}
       />
+
+      {/* ─── Calendrier ─── */}
+      {tab === 'calendar' && (
+        <>
+          {/* Modal réservation admin */}
+          {bookingSlot && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+              <div className="rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" style={{ background: 'var(--panel)', color: 'var(--ink)' }}>
+                <h3 className="font-bold text-base">
+                  Réserver — Court {bookingSlot.courtId} à {bookingSlot.time}
+                  <span className="text-sm font-normal text-ink-muted ml-2">{new Date(calDate + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+                </h3>
+
+                {/* Pour qui ? */}
+                <div>
+                  <label className="text-sm font-medium block mb-1">Pour qui ?</label>
+                  <div className="flex gap-2 mb-2">
+                    {[{ v: 'member', l: 'Abonné du club' }, { v: 'guest', l: 'Non-abonné' }].map(o => (
+                      <button key={o.v} type="button"
+                              className={`btn text-xs px-3 py-1 ${bookingFor === o.v ? 'btn-primary' : 'btn-outline'}`}
+                              onClick={() => setBookingFor(o.v)}>
+                        {o.l}
+                      </button>
+                    ))}
+                  </div>
+                  {bookingFor === 'member' ? (
+                    <select className="field w-full" value={bookingUserId} onChange={e => setBookingUserId(e.target.value)}>
+                      <option value="">— Choisir un abonné —</option>
+                      {calMembers.map(m => <option key={m.id} value={m.id}>{m.name} ({m.email})</option>)}
+                    </select>
+                  ) : (
+                    <input className="field w-full" placeholder="Prénom Nom du joueur"
+                           value={bookingGuestName} onChange={e => setBookingGuestName(e.target.value)} />
+                  )}
+                </div>
+
+                {/* Adversaire */}
+                <div>
+                  <label className="text-sm font-medium block mb-1">Adversaire (optionnel)</label>
+                  <div className="flex gap-2 mb-2">
+                    {[{ v: 'none', l: 'Aucun' }, { v: 'member', l: 'Abonné' }, { v: 'guest', l: 'Invité' }].map(o => (
+                      <button key={o.v} type="button"
+                              className={`btn text-xs px-2 py-1 ${bookingP2Mode === o.v ? 'btn-primary' : 'btn-outline'}`}
+                              onClick={() => setBookingP2Mode(o.v)}>
+                        {o.l}
+                      </button>
+                    ))}
+                  </div>
+                  {bookingP2Mode === 'member' && (
+                    <select className="field w-full" value={bookingP2Id} onChange={e => setBookingP2Id(e.target.value)}>
+                      <option value="">— Choisir —</option>
+                      {calMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                  )}
+                  {bookingP2Mode === 'guest' && (
+                    <input className="field w-full" placeholder="Prénom Nom"
+                           value={bookingP2Name} onChange={e => setBookingP2Name(e.target.value)} />
+                  )}
+                </div>
+
+                {/* Note */}
+                <div>
+                  <label className="text-sm font-medium block mb-1">Note (optionnelle)</label>
+                  <input className="field w-full" placeholder="Ex: cours particulier, tournoi…"
+                         value={bookingNote} onChange={e => setBookingNote(e.target.value)} />
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                  <button className="btn btn-outline" onClick={() => setBookingSlot(null)} disabled={bookingBusy}>Annuler</button>
+                  <button className="btn btn-primary" onClick={handleAdminBook} disabled={bookingBusy}>
+                    {bookingBusy ? 'Réservation…' : 'Confirmer'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Barre date + blocage */}
+          <div className="card">
+            <div className="card-body flex flex-wrap gap-3 items-center justify-between py-3">
+              <div className="toolbar">
+                <button type="button" className="btn btn-outline text-sm" onClick={() => changeCalDate(-1)}>← Jour</button>
+                <input type="date" className="field w-40 text-sm" value={calDate} onChange={e => setCalDate(e.target.value)} />
+                <button type="button" className="btn btn-outline text-sm" onClick={() => changeCalDate(1)}>Jour →</button>
+                <button type="button" className="btn btn-outline text-sm" onClick={reloadCalDay} title="Rafraîchir">↻</button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input className="field text-sm w-52" placeholder="Raison de blocage…"
+                       value={calReason} onChange={e => setCalReason(e.target.value)} />
+                <span className="text-xs text-ink-muted">Cliquez 🚫 sur un créneau libre pour bloquer</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Grille */}
+          <div className="card">
+            <div className="card-header">
+              <h2 className="font-semibold capitalize">
+                {new Date(calDate + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </h2>
+            </div>
+            <div className="card-body p-0">
+              {!calCfg || calLoading ? (
+                <div className="flex items-center gap-3 p-5 text-ink-muted text-sm">
+                  <div className="animate-spin w-4 h-4 border-2 border-brand border-t-transparent rounded-full" />
+                  Chargement des créneaux…
+                </div>
+              ) : (
+                <SlotGrid
+                  cfg={calCfg}
+                  date={calDate}
+                  dayData={calDayData}
+                  user={user}
+                  note=""
+                  reason={calReason}
+                  onReserve={(courtId, time) => openBookingModal(courtId, time)}
+                  onCancel={handleCalCancel}
+                  onToggleBlock={handleCalToggleBlock}
+                  loading={calLoading}
+                />
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ─── Stats ─── */}
       {tab === 'stats' && (

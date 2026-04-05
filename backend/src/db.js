@@ -80,11 +80,12 @@ CREATE TABLE IF NOT EXISTS booking_units (
 );
 `);
 
-// Migration : ajouter les colonnes player2 si elles n'existent pas (DB existante)
+// Migration : ajouter les colonnes manquantes sur une DB existante
 {
   const cols = selectAll("PRAGMA table_info(bookings)").map(c => c.name);
-  if (!cols.includes("player2_id"))   db.run("ALTER TABLE bookings ADD COLUMN player2_id TEXT");
-  if (!cols.includes("player2_name")) db.run("ALTER TABLE bookings ADD COLUMN player2_name TEXT");
+  if (!cols.includes("player2_id"))      db.run("ALTER TABLE bookings ADD COLUMN player2_id TEXT");
+  if (!cols.includes("player2_name"))    db.run("ALTER TABLE bookings ADD COLUMN player2_name TEXT");
+  if (!cols.includes("booked_for_name")) db.run("ALTER TABLE bookings ADD COLUMN booked_for_name TEXT");
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

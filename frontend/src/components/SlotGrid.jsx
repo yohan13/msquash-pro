@@ -107,7 +107,12 @@ export default function SlotGrid({ cfg, date, dayData, user, note, reason, onRes
                               </>
                             ) : isAdmin ? (
                               <>
-                                <span className="text-[11px] font-semibold truncate max-w-full" title={b.user_name}>{b.user_name}</span>
+                                <span className="text-[11px] font-semibold truncate max-w-full"
+                                      title={b.booked_for_name || b.user_name}>
+                                  {b.booked_for_name
+                                    ? <>{b.booked_for_name} <span className="text-[9px] text-ink-muted font-normal">(invité)</span></>
+                                    : b.user_name}
+                                </span>
                                 {(b.player2_member_name || b.player2_name) && (
                                   <span className="text-[9px] text-ink-muted truncate max-w-full">
                                     vs {b.player2_member_name || b.player2_name}

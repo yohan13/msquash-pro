@@ -92,9 +92,22 @@ router.get("/slots", (req, res) => {
   if (!date || !isValidDateStr(String(date)))
     return res.status(400).json({ error: "INVALID_DATE" });
 
+  // Lecture optionnelle du token pour déterminer le rôle
+  let currentUserId = null;
+  let isAdmin = false;
+  const rawToken = (req.headers.authorization || '').replace(/^bearer\s+/i, '');
+  if (rawToken) {
+    try {
+      const payload = jwt.verify(rawToken, config.JWT_SECRET);
+      currentUserId = payload.sub;
+      isAdmin = payload.role === 'ADMIN';
+    } catch { /* token invalide — accès anonyme */ }
+  }
+
   const bookings = selectAll(
-    `SELECT b.*,
-            u.name  as user_name,  u.email as user_email,
+    `SELECT b.id, b.date, b.time, b.court_id, b.user_id, b.note,
+            b.player2_id, b.player2_name,
+            u.name  as user_name,
             p2.name as player2_member_name
      FROM bookings b
      JOIN users u ON u.id = b.user_id
@@ -102,11 +115,25 @@ router.get("/slots", (req, res) => {
      WHERE b.date = ? ORDER BY b.time, b.court_id`,
     [String(date)]
   );
+
+  // Anonymiser les données personnelles pour les non-admins
+  const sanitized = bookings.map(b => {
+    const owned = b.user_id === currentUserId || b.player2_id === currentUserId;
+    if (isAdmin || owned) return b;
+    return {
+      id:       b.id,
+      date:     b.date,
+      time:     b.time,
+      court_id: b.court_id,
+      user_id:  b.user_id,   // nécessaire pour la logique owned côté frontend
+    };
+  });
+
   const blocks = selectAll(
     "SELECT * FROM blocks WHERE date = ? ORDER BY time, court_id",
     [String(date)]
   );
-  res.json({ bookings, blocks });
+  res.json({ bookings: sanitized, blocks });
 });
 
 // GET /api/my/bookings

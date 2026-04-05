@@ -95,15 +95,29 @@ export default function SlotGrid({ cfg, date, dayData, user, note, reason, onRes
                           </div>
                         ) : b ? (
                           <div className="flex flex-col items-center text-center w-full px-1">
-                            <span className="text-[11px] font-semibold truncate max-w-full" title={b.user_name}>
-                              {owned ? '✓ Moi' : b.user_name}
-                            </span>
-                            {(b.player2_member_name || b.player2_name) && (
-                              <span className="text-[9px] text-ink-muted truncate max-w-full">
-                                vs {b.player2_member_name || b.player2_name}
-                              </span>
+                            {owned ? (
+                              <>
+                                <span className="text-[11px] font-semibold truncate max-w-full">✓ Moi</span>
+                                {(b.player2_member_name || b.player2_name) && (
+                                  <span className="text-[9px] text-ink-muted truncate max-w-full">
+                                    vs {b.player2_member_name || b.player2_name}
+                                  </span>
+                                )}
+                                {b.note && <span className="text-[9px] text-ink-muted truncate max-w-full" title={b.note}>{b.note}</span>}
+                              </>
+                            ) : isAdmin ? (
+                              <>
+                                <span className="text-[11px] font-semibold truncate max-w-full" title={b.user_name}>{b.user_name}</span>
+                                {(b.player2_member_name || b.player2_name) && (
+                                  <span className="text-[9px] text-ink-muted truncate max-w-full">
+                                    vs {b.player2_member_name || b.player2_name}
+                                  </span>
+                                )}
+                                {b.note && <span className="text-[9px] text-ink-muted truncate max-w-full" title={b.note}>{b.note}</span>}
+                              </>
+                            ) : (
+                              <span className="text-[11px] text-ink-muted">Réservé</span>
                             )}
-                            {b.note && <span className="text-[9px] text-ink-muted truncate max-w-full" title={b.note}>{b.note}</span>}
                             <div className="flex items-center gap-0.5 mt-0.5">
                               {(owned || isAdmin) && (
                                 <button type="button"
@@ -112,8 +126,10 @@ export default function SlotGrid({ cfg, date, dayData, user, note, reason, onRes
                                   ✕
                                 </button>
                               )}
-                              <a className="btn btn-soft px-1.5 py-0.5 text-[10px]"
-                                 href={bookingICSUrl(b.id)} title="Ajouter au calendrier">.ics</a>
+                              {(owned || isAdmin) && (
+                                <a className="btn btn-soft px-1.5 py-0.5 text-[10px]"
+                                   href={bookingICSUrl(b.id)} title="Ajouter au calendrier">.ics</a>
+                              )}
                               {isAdmin && (
                                 <button type="button" className="btn btn-outline px-1.5 py-0.5 text-[10px]"
                                         onClick={() => onToggleBlock(c.id, t)}>

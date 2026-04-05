@@ -123,11 +123,9 @@ export function uid(prefix = "id") {
 
 // ─── Init courts & admin ──────────────────────────────────────────────────────
 
-const courtCount = selectOne("SELECT COUNT(*) as c FROM courts")?.c || 0;
-if (freshDb || courtCount === 0) {
-  for (let i = 1; i <= config.COURTS; i++) {
-    run("INSERT OR IGNORE INTO courts (id, name) VALUES (?, ?)", [i, `Court ${i}`]);
-  }
+// Toujours s'assurer que tous les courts jusqu'à config.COURTS existent
+for (let i = 1; i <= config.COURTS; i++) {
+  run("INSERT OR IGNORE INTO courts (id, name) VALUES (?, ?)", [i, `Court ${i}`]);
 }
 
 export { db, freshDb };

@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { adminGetUsers, adminGetStats, adminUpdateRole, adminResetPassword, adminDeleteUser,
-         adminGetSubscriptions, adminCreateSubscription, adminDeleteSubscription } from '../api'
+         adminGetSubscriptions, adminCreateSubscription, adminDeleteSubscription,
+         adminGetRevenue } from '../api'
 import Banner from '../components/Banner'
 import Modal from '../components/Modal'
 import { useBanner } from '../hooks/useBanner'
@@ -27,6 +28,9 @@ export default function Admin() {
   const [cardTypes, setCardTypes] = useState({})
   const [newSub, setNewSub]       = useState({ userId: '', cardType: '' })
   const [subToDelete, setSubToDelete] = useState(null)
+
+  // Revenue
+  const [revenue, setRevenue] = useState(null)
 
   if (!user || user.role !== 'ADMIN') {
     navigate('/')
@@ -61,10 +65,18 @@ export default function Admin() {
     finally { setLoading(false) }
   }
 
+  async function loadRevenue() {
+    setLoading(true)
+    try { setRevenue(await adminGetRevenue()) }
+    catch { setBanner('error', 'Erreur chargement revenus.') }
+    finally { setLoading(false) }
+  }
+
   useEffect(() => {
-    if (tab === 'stats') loadStats()
-    else if (tab === 'users') loadUsers()
-    else if (tab === 'subs') loadSubs()
+    if (tab === 'stats')    loadStats()
+    else if (tab === 'users')    loadUsers()
+    else if (tab === 'subs')     loadSubs()
+    else if (tab === 'revenue')  loadRevenue()
   }, [tab])
 
   async function handleRoleToggle(u) {
@@ -108,7 +120,7 @@ export default function Admin() {
     <main className="max-w-5xl mx-auto px-4 py-8 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold">Administration</h1>
-        <div className="toolbar">{tabBtn('stats', '📊 Statistiques')}{tabBtn('users', '👥 Membres')}{tabBtn('subs', '🎫 Abonnements')}</div>
+        <div className="toolbar">{tabBtn('stats', '📊 Statistiques')}{tabBtn('revenue', '💰 Revenus')}{tabBtn('users', '👥 Membres')}{tabBtn('subs', '🎫 Abonnements')}</div>
       </div>
 
       {banner && <Banner banner={banner} onClose={clearBanner} />}
@@ -201,6 +213,119 @@ export default function Admin() {
                 <div className="flex justify-between text-[10px] text-ink-muted mt-1">
                   <span>{stats.last30days[0]?.date}</span>
                   <span>{stats.last30days[stats.last30days.length - 1]?.date}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── Revenus ─── */}
+      {tab === 'revenue' && (
+        loading ? <div className="text-ink-muted text-sm">Chargement…</div> :
+        revenue && <>
+          {/* KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'CA total',          value: `${revenue.totalRevenue} €`,       color: 'bg-green-50 border-green-100' },
+              { label: 'CA ce mois',         value: `${revenue.currentMonthRevenue} €`, color: 'bg-blue-50 border-blue-100' },
+              { label: 'Cartes vendues',     value: revenue.totalCardsSold,             color: 'bg-purple-50 border-purple-100' },
+              { label: 'Taux utilisation',   value: `${revenue.utilizationRate} %`,     color: 'bg-orange-50 border-orange-100' },
+            ].map(k => (
+              <div key={k.label} className={`card border ${k.color}`}>
+                <div className="card-body py-3">
+                  <div className="text-2xl font-bold">{k.value}</div>
+                  <div className="text-xs text-ink-muted mt-0.5">{k.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Répartition par type de carte */}
+            <div className="card">
+              <div className="card-header"><h2 className="font-semibold text-sm">Répartition par type de carte</h2></div>
+              <div className="card-body space-y-4">
+                {revenue.byCardType.length === 0
+                  ? <p className="text-sm text-ink-muted">Aucune vente.</p>
+                  : revenue.byCardType.map(ct => {
+                      const maxRev = Math.max(...revenue.byCardType.map(x => x.revenue), 1)
+                      return (
+                        <div key={ct.cardType}>
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className="font-medium">{ct.label}</span>
+                            <span className="text-brand font-bold">{ct.revenue} €</span>
+                          </div>
+                          <div className="h-2 rounded-full overflow-hidden mb-1" style={{ background: 'var(--panel-alt)' }}>
+                            <div className="h-full bg-brand rounded-full transition-all"
+                                 style={{ width: `${(ct.revenue / maxRev) * 100}%` }} />
+                          </div>
+                          <div className="flex justify-between text-xs text-ink-muted">
+                            <span>{ct.count} carte{ct.count > 1 ? 's' : ''} · {ct.price} €/carte</span>
+                            <span>Utilisation : {ct.utilizationRate} %</span>
+                          </div>
+                        </div>
+                      )
+                    })
+                }
+              </div>
+            </div>
+
+            {/* Top acheteurs */}
+            <div className="card">
+              <div className="card-header"><h2 className="font-semibold text-sm">Top acheteurs</h2></div>
+              <div className="card-body space-y-2">
+                {revenue.topSpenders.length === 0
+                  ? <p className="text-sm text-ink-muted">Aucun achat.</p>
+                  : revenue.topSpenders.map((s, i) => {
+                      const maxRev = Math.max(...revenue.topSpenders.map(x => x.revenue), 1)
+                      return (
+                        <div key={s.email}>
+                          <div className="flex items-center justify-between text-sm mb-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-ink-muted w-4 text-right text-xs">{i + 1}.</span>
+                              <span className="font-medium">{s.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="chip text-xs">{s.cards} carte{s.cards > 1 ? 's' : ''}</span>
+                              <span className="font-bold text-brand text-xs">{s.revenue} €</span>
+                            </div>
+                          </div>
+                          <div className="h-1 rounded-full overflow-hidden ml-6" style={{ background: 'var(--panel-alt)' }}>
+                            <div className="h-full bg-brand/60 rounded-full" style={{ width: `${(s.revenue / maxRev) * 100}%` }} />
+                          </div>
+                        </div>
+                      )
+                    })
+                }
+              </div>
+            </div>
+          </div>
+
+          {/* Tendance mensuelle */}
+          {revenue.monthlyRevenue.length > 0 && (
+            <div className="card">
+              <div className="card-header"><h2 className="font-semibold text-sm">Tendance mensuelle — 12 derniers mois</h2></div>
+              <div className="card-body">
+                <div className="flex items-end gap-1.5 h-28">
+                  {revenue.monthlyRevenue.map(m => {
+                    const maxR = Math.max(...revenue.monthlyRevenue.map(x => x.revenue), 1)
+                    const barH = Math.max((m.revenue / maxR) * 96, 3)
+                    return (
+                      <div key={m.month} className="flex-1 flex flex-col items-center gap-1 group"
+                           title={`${m.month} : ${m.revenue} € (${m.count} carte${m.count > 1 ? 's' : ''})`}>
+                        <span className="text-[9px] text-ink-muted opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          {m.revenue} €
+                        </span>
+                        <div className="w-full bg-brand/70 rounded-t-sm hover:bg-brand transition-colors"
+                             style={{ height: `${barH}px` }} />
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex justify-between text-[10px] text-ink-muted mt-1">
+                  <span>{revenue.monthlyRevenue[0]?.month}</span>
+                  <span>{revenue.monthlyRevenue[revenue.monthlyRevenue.length - 1]?.month}</span>
                 </div>
               </div>
             </div>

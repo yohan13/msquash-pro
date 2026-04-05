@@ -185,3 +185,7 @@ export function adminDeleteSubscription(id) {
     headers: authHeader(),
   })
 }
+
+export function adminGetRevenue() {
+  return request(`${API_URL}/api/admin/revenue`, { headers: authHeader() })
+}

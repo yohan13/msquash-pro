@@ -238,4 +238,91 @@ router.delete("/admin/subscriptions/:id", (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Revenus ──────────────────────────────────────────────────────────────────
+
+// GET /api/admin/revenue
+router.get("/admin/revenue", (req, res) => {
+  const today        = new Date().toISOString().slice(0, 10);
+  const currentMonth = today.slice(0, 7);
+  const twelveMonthsAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7);
+
+  // Ventes groupées par type de carte
+  const byCardTypeRaw = selectAll(
+    `SELECT card_type, COUNT(*) as count,
+            SUM(total_units) as total_units_sold,
+            SUM(used_units)  as used_units
+     FROM subscriptions GROUP BY card_type ORDER BY card_type`
+  );
+  const byCardType = byCardTypeRaw.map(r => {
+    const ct = CARD_TYPES[r.card_type] || {};
+    return {
+      cardType:        r.card_type,
+      label:           ct.label || r.card_type,
+      price:           ct.price || 0,
+      count:           r.count,
+      revenue:         (ct.price || 0) * r.count,
+      totalUnitsSold:  r.total_units_sold,
+      usedUnits:       r.used_units,
+      utilizationRate: r.total_units_sold > 0
+        ? Math.round((r.used_units / r.total_units_sold) * 100) : 0,
+    };
+  });
+
+  const totalRevenue   = byCardType.reduce((s, r) => s + r.revenue, 0);
+  const totalCardsSold = byCardType.reduce((s, r) => s + r.count, 0);
+
+  // Tendance mensuelle (12 derniers mois), revenue calculé en JS
+  const monthlyRaw = selectAll(
+    `SELECT substr(purchased_at, 1, 7) as month, card_type, COUNT(*) as count
+     FROM subscriptions
+     WHERE substr(purchased_at, 1, 7) >= ?
+     GROUP BY month, card_type ORDER BY month`,
+    [twelveMonthsAgo]
+  );
+  const monthlyMap = {};
+  for (const r of monthlyRaw) {
+    if (!monthlyMap[r.month]) monthlyMap[r.month] = { month: r.month, revenue: 0, count: 0 };
+    monthlyMap[r.month].revenue += (CARD_TYPES[r.card_type]?.price || 0) * r.count;
+    monthlyMap[r.month].count  += r.count;
+  }
+  const monthlyRevenue = Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month));
+
+  const currentMonthRevenue = monthlyRevenue.find(m => m.month === currentMonth)?.revenue || 0;
+
+  // Top acheteurs par CA total
+  const spendersRaw = selectAll(
+    `SELECT u.name, u.email, s.card_type, COUNT(*) as count
+     FROM subscriptions s JOIN users u ON u.id = s.user_id
+     GROUP BY s.user_id, s.card_type`
+  );
+  const spendersMap = {};
+  for (const r of spendersRaw) {
+    if (!spendersMap[r.email]) spendersMap[r.email] = { name: r.name, email: r.email, revenue: 0, cards: 0 };
+    spendersMap[r.email].revenue += (CARD_TYPES[r.card_type]?.price || 0) * r.count;
+    spendersMap[r.email].cards  += r.count;
+  }
+  const topSpenders = Object.values(spendersMap)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
+  // Taux d'utilisation global (cartes actives)
+  const utilRaw = selectOne(
+    `SELECT SUM(used_units) as used, SUM(total_units) as total
+     FROM subscriptions WHERE expires_at >= ?`,
+    [today]
+  );
+  const utilizationRate = utilRaw?.total > 0
+    ? Math.round((utilRaw.used / utilRaw.total) * 100) : 0;
+
+  res.json({
+    totalRevenue,
+    currentMonthRevenue,
+    totalCardsSold,
+    utilizationRate,
+    byCardType,
+    monthlyRevenue,
+    topSpenders,
+  });
+});
+
 export default router;

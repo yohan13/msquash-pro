@@ -43,7 +43,7 @@ router.delete("/blocks/:id", (req, res) => {
 // ─── Export CSV ───────────────────────────────────────────────────────────────
 
 // GET /api/admin/export/csv?from=YYYY-MM-DD&to=YYYY-MM-DD
-router.get("/export/csv", (req, res) => {
+router.get("/admin/export/csv", (req, res) => {
   const { from, to } = req.query;
 
   // Validate date format if provided
@@ -84,7 +84,7 @@ router.get("/export/csv", (req, res) => {
 // ─── User management ──────────────────────────────────────────────────────────
 
 // GET /api/admin/users
-router.get("/users", (req, res) => {
+router.get("/admin/users", (req, res) => {
   const users = selectAll(
     `SELECT u.id, u.name, u.email, u.role, u.created_at,
             (SELECT COUNT(*) FROM bookings b WHERE b.user_id = u.id) as booking_count
@@ -94,7 +94,7 @@ router.get("/users", (req, res) => {
 });
 
 // PATCH /api/admin/users/:id/role
-router.patch("/users/:id/role", (req, res) => {
+router.patch("/admin/users/:id/role", (req, res) => {
   const { role } = req.body || {};
   if (!["USER", "ADMIN"].includes(role))
     return res.status(400).json({ error: "INVALID_ROLE" });
@@ -112,7 +112,7 @@ router.patch("/users/:id/role", (req, res) => {
 });
 
 // PATCH /api/admin/users/:id/password
-router.patch("/users/:id/password", (req, res) => {
+router.patch("/admin/users/:id/password", (req, res) => {
   const { newPassword } = req.body || {};
   if (!newPassword || String(newPassword).length < 6)
     return res.status(400).json({ error: "WEAK_PASSWORD" });
@@ -127,7 +127,7 @@ router.patch("/users/:id/password", (req, res) => {
 });
 
 // DELETE /api/admin/users/:id
-router.delete("/users/:id", (req, res) => {
+router.delete("/admin/users/:id", (req, res) => {
   if (req.params.id === req.user.sub)
     return res.status(403).json({ error: "CANNOT_DELETE_SELF" });
 
@@ -144,7 +144,7 @@ router.delete("/users/:id", (req, res) => {
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
 // GET /api/admin/stats
-router.get("/stats", (req, res) => {
+router.get("/admin/stats", (req, res) => {
   const totalBookings = selectOne("SELECT COUNT(*) as c FROM bookings")?.c || 0;
   const totalUsers    = selectOne("SELECT COUNT(*) as c FROM users")?.c || 0;
   const totalBlocks   = selectOne("SELECT COUNT(*) as c FROM blocks")?.c || 0;
@@ -167,10 +167,12 @@ router.get("/stats", (req, res) => {
      GROUP BY u.id ORDER BY count DESC LIMIT 10`
   );
 
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const last30days = selectAll(
     `SELECT date, COUNT(*) as count FROM bookings
-     WHERE date >= date('now', '-30 days')
-     GROUP BY date ORDER BY date`
+     WHERE date >= ?
+     GROUP BY date ORDER BY date`,
+    [thirtyDaysAgo]
   );
 
   res.json({ totalBookings, totalUsers, totalBlocks, futureBookings, bookingsPerCourt, topUsers, last30days });

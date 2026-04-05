@@ -8,7 +8,11 @@ import { useBanner } from '../hooks/useBanner'
 export default function App() {
   const { user, loading, logout } = useAuth()
   const [authOpen, setAuthOpen]   = useState(false)
-  const [dark, setDark]           = useState(() => localStorage.getItem('theme-dark') === '1')
+  const [dark, setDark]           = useState(() => {
+    const stored = localStorage.getItem('theme-dark')
+    if (stored !== null) return stored === '1'
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  })
   const { banner, setBanner, clearBanner } = useBanner()
   const loc      = useLocation()
   const navigate = useNavigate()

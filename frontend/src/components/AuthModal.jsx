@@ -40,7 +40,7 @@ export default function AuthModal({ open, onClose, onSuccess }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
          onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4"
+      <div className="rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" style={{ background: 'var(--panel)', color: 'var(--ink)' }}
            onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-base">

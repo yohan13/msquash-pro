@@ -1,4 +1,5 @@
 import { Router } from "express";
+import jwt from "jsonwebtoken";
 import { selectOne, selectAll, run, saveDb, uid } from "../db.js";
 import { auth } from "../middleware/auth.js";
 import { config } from "../config.js";
@@ -76,7 +77,7 @@ router.get("/my/bookings", auth, (req, res) => {
 });
 
 // POST /api/bookings
-router.post("/", auth, (req, res) => {
+router.post("/bookings", auth, (req, res) => {
   const { date, time, courtId, note } = req.body || {};
 
   if (!date || !isValidDateStr(date))
@@ -114,7 +115,7 @@ router.post("/", auth, (req, res) => {
 });
 
 // DELETE /api/bookings/:id
-router.delete("/:id", auth, (req, res) => {
+router.delete("/bookings/:id", auth, (req, res) => {
   const { id } = req.params;
   const b = selectOne("SELECT * FROM bookings WHERE id = ?", [id]);
   if (!b) return res.status(404).json({ error: "NOT_FOUND" });
@@ -129,8 +130,14 @@ router.delete("/:id", auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// GET /api/bookings/:id/ics
-router.get("/:id/ics", auth, (req, res) => {
+// GET /api/bookings/:id/ics  (accepts token via query string for direct browser downloads)
+router.get("/bookings/:id/ics", (req, res) => {
+  const rawToken = (req.headers.authorization || '').replace(/^bearer\s+/i, '') || req.query.token
+  if (!rawToken) return res.status(401).send("UNAUTHORIZED")
+  try {
+    req.user = jwt.verify(rawToken, config.JWT_SECRET)
+  } catch { return res.status(401).send("INVALID_TOKEN") }
+
   const b = selectOne(
     `SELECT b.*, u.name as user_name, u.email as user_email
      FROM bookings b JOIN users u ON u.id = b.user_id WHERE b.id = ?`,

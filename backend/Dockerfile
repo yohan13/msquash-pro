@@ -6,10 +6,12 @@ COPY package.json ./
 RUN npm install --omit=dev
 
 COPY src/ ./src/
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x docker-entrypoint.sh
 
 ENV PORT=4000
 ENV NODE_ENV=production
 
 EXPOSE 4000
 
-CMD ["node", "src/server.js"]
+CMD ["sh", "docker-entrypoint.sh"]

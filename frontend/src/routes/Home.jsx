@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext, useNavigate } from 'react-router-dom'
 import { getConfig } from '../api'
 import { useAuth } from '../context/AuthContext'
 
 export default function Home() {
   const { user }          = useAuth()
   const { setAuthOpen }   = useOutletContext() || {}
+  const navigate          = useNavigate()
   const [cfg, setCfg]     = useState(null)
   const club    = import.meta.env.VITE_CLUB_NAME || 'M Squash'
   const tagline = import.meta.env.VITE_TAGLINE   || 'Club • Food • Sports'
@@ -57,17 +58,20 @@ export default function Home() {
         <h2 className="text-xl font-bold mb-5">Tout ce dont vous avez besoin</h2>
         <div className="grid md:grid-cols-3 gap-4">
           {[
-            { icon: '📅', title: 'Réservation simple', desc: 'Visualisez la disponibilité en temps réel et réservez votre créneau en 2 clics.' },
-            { icon: '👥', title: 'Comptes membres', desc: 'Gérez votre profil, consultez votre historique et vos réservations à venir.' },
-            { icon: '⚙️', title: 'Outils admin', desc: 'Blocages, exports CSV, gestion des membres et statistiques du club.' },
+            { icon: '📅', title: 'Réservation simple', desc: 'Visualisez la disponibilité en temps réel et réservez votre créneau en 2 clics.', action: () => navigate('/booking') },
+            { icon: '👥', title: 'Comptes membres', desc: 'Gérez votre profil, consultez votre historique et vos réservations à venir.', action: () => user ? navigate('/profile') : setAuthOpen?.(true) },
+            { icon: '⚙️', title: 'Outils admin', desc: 'Blocages, exports CSV, gestion des membres et statistiques du club.', action: () => user?.role === 'ADMIN' ? navigate('/admin') : null, adminOnly: true },
           ].map(f => (
-            <div key={f.title} className="card">
+            <button key={f.title} type="button"
+                    onClick={f.action}
+                    className="card text-left hover:shadow-md transition-shadow cursor-pointer w-full"
+                    style={{ opacity: f.adminOnly && user?.role !== 'ADMIN' ? 0.5 : 1, cursor: f.adminOnly && user?.role !== 'ADMIN' ? 'default' : 'pointer' }}>
               <div className="card-body">
                 <div className="text-3xl mb-3">{f.icon}</div>
                 <h3 className="font-semibold mb-1">{f.title}</h3>
                 <p className="text-sm text-ink-muted">{f.desc}</p>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </section>

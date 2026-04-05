@@ -62,13 +62,13 @@ export default function SlotGrid({ cfg, date, dayData, user, note, reason, onRes
               <React.Fragment key={t}>
                 <div className="grid-time text-xs">
                   <span className="font-medium">{t}</span>
-                  {isToday && !timeLess(t, nowHHMM) && <span className="text-[9px] block text-ink-muted/70 leading-tight">passé</span>}
+                  {isToday && timeLess(t, nowHHMM) && <span className="text-[9px] block text-ink-muted/70 leading-tight">passé</span>}
                 </div>
 
                 {cfg.courts.map(c => {
                   const b      = findBooking(c.id, t)
                   const bl     = findBlock(c.id, t)
-                  const isPast = isToday && !timeLess(t, nowHHMM)
+                  const isPast = isToday && timeLess(t, nowHHMM)
                   const owned  = user && b && b.user_id === user.id
 
                   let cellClass = 'border border-gray-100 '

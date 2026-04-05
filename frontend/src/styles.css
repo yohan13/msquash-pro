@@ -2,32 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
-:root{ --brand: var(--brand-dynamic, #0a6bdc); --brand-600:#0a62c8; --brand-700:#0958b5; --ink:#0f172a; --ink-muted:#475569; --surface:#f7f8fb; --panel:#ffffff; --ring: rgba(10,107,220,.25); }
+:root{ --brand: var(--brand-dynamic, #0a6bdc); --brand-600:#0a62c8; --brand-700:#0958b5; --ink:#0f172a; --ink-muted:#475569; --surface:#f7f8fb; --panel:#ffffff; --panel-alt:#f1f5f9; --border:rgba(0,0,0,0.08); --ring: rgba(10,107,220,.25); }
+:root.dark{ --ink:#e2e8f0; --ink-muted:#94a3b8; --surface:#0b1220; --panel:#0f172a; --panel-alt:#1e293b; --border:rgba(255,255,255,0.08); --ring: rgba(56,189,248,.25); }
 .text-brand{ color: var(--brand); }
 .bg-brand{ background: var(--brand); }
 .bg-brand\/10{ background: color-mix(in srgb, var(--brand) 10%, transparent); }
-.bg-brand\/8{ background: color-mix(in srgb, var(--brand) 8%, white); }
-@media (prefers-color-scheme: dark){ :root{ --ink:#e2e8f0; --ink-muted:#94a3b8; --surface:#0b1220; --panel:#0f172a; --ring: rgba(56,189,248,.25);} }
-body{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial; }
+.bg-brand\/8{ background: color-mix(in srgb, var(--brand) 8%, transparent); }
+body{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial; color: var(--ink); background: var(--surface); }
 .bg-surface{ background: var(--surface); } .text-ink{ color: var(--ink); } .text-ink-muted{ color: var(--ink-muted); }
 
 @layer components {
-  .card{ @apply rounded-2xl shadow-sm border border-gray-200/60 bg-[var(--panel)]; }
-  .card-header{ @apply px-5 py-4 border-b border-gray-200/60; }
+  .card{ @apply rounded-2xl shadow-sm; border: 1px solid var(--border); background: var(--panel); }
+  .card-header{ @apply px-5 py-4; border-bottom: 1px solid var(--border); }
   .card-body{ @apply p-5; }
   .btn{ @apply inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium border transition cursor-pointer; }
   .btn-primary{ @apply border-transparent text-white; background: var(--brand); } .btn-primary:hover{ background: var(--brand-600); }
-  .btn-outline{ @apply border-gray-300 text-ink bg-white; } .btn-outline:hover{ @apply bg-gray-50; }
-  .btn-soft{ color: var(--brand-700); background: color-mix(in srgb, var(--brand) 12%, white); border-color: transparent; }
-  .chip{ @apply inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700; }
-  .field{ @apply w-full rounded-xl border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-4; box-shadow: 0 0 0 1px rgba(0,0,0,0.02); }
+  .btn-outline{ border-color: var(--border); color: var(--ink); background: var(--panel); } .btn-outline:hover{ background: var(--panel-alt); }
+  .btn-soft{ color: var(--brand-700); background: color-mix(in srgb, var(--brand) 12%, transparent); border-color: transparent; }
+  .chip{ @apply inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full; background: var(--panel-alt); color: var(--ink-muted); }
+  .field{ @apply w-full rounded-xl px-3 py-2 focus:outline-none focus:ring-4; border: 1px solid var(--border); background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px rgba(0,0,0,0.02); }
   .field:focus{ box-shadow: 0 0 0 1px var(--brand), 0 0 0 4px var(--ring); border-color: var(--brand); }
+  .field::placeholder{ color: var(--ink-muted); opacity: 0.7; }
   .toolbar{ @apply flex flex-wrap items-center gap-2; }
-  .grid-head{ @apply p-2 text-center font-semibold bg-gray-100 border; }
-  .grid-time{ @apply p-2 text-sm bg-gray-50 border flex items-center justify-between; }
+  .grid-head{ @apply p-2 text-center font-semibold border; background: var(--panel-alt); color: var(--ink); }
+  .grid-time{ @apply p-2 text-sm border flex items-center justify-between; background: var(--panel-alt); color: var(--ink); }
   .slot{ @apply border p-1.5 h-[56px] flex items-center justify-center; }
-  .slot-booked{ @apply bg-green-50; } .slot-own{ @apply bg-blue-50; } .slot-blocked{ @apply bg-gray-200; }
+  .slot-booked{ @apply bg-green-50; } .slot-own{ @apply bg-blue-50; } .slot-blocked{ background: var(--panel-alt); }
   .slot-actions{ @apply flex gap-1; }
 }
-.header-glass{ backdrop-filter: saturate(180%) blur(8px); background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 12%, white), transparent); }
-.brand-gradient{ background: radial-gradient(1200px 500px at 10% -10%, color-mix(in srgb, var(--brand) 18%, white) 0, transparent 60%); }
+.header-glass{ backdrop-filter: saturate(180%) blur(8px); background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 10%, var(--panel)), var(--panel)); border-bottom: 1px solid var(--border); }
+.brand-gradient{ background: var(--surface); }

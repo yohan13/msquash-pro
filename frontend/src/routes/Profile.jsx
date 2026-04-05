@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { updateProfile } from '../api'
 import Banner from '../components/Banner'
 import { useBanner } from '../hooks/useBanner'
+import MyBookings from '../components/MyBookings'
 
 export default function Profile() {
   const { user, reload, logout } = useAuth()
@@ -130,6 +131,14 @@ export default function Profile() {
               {busyPw ? 'Mise à jour…' : 'Changer le mot de passe'}
             </button>
           </form>
+        </div>
+      </div>
+
+      {/* Booking history */}
+      <div className="card">
+        <div className="card-header"><h2 className="font-semibold text-sm">Mes réservations</h2></div>
+        <div className="card-body">
+          <MyBookings user={user} refresh={0} />
         </div>
       </div>
     </main>

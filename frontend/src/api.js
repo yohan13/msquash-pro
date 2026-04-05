@@ -146,3 +146,34 @@ export function adminDeleteUser(userId) {
 export function adminGetStats() {
   return request(`${API_URL}/api/admin/stats`, { headers: authHeader() })
 }
+
+// ─── Members (pour picker adversaire) ────────────────────────────────────────
+
+export function getMembers() {
+  return request(`${API_URL}/api/members`, { headers: authHeader() })
+}
+
+// ─── Subscriptions ────────────────────────────────────────────────────────────
+
+export function mySubscriptions() {
+  return request(`${API_URL}/api/my/subscriptions`, { headers: authHeader() })
+}
+
+export function adminGetSubscriptions() {
+  return request(`${API_URL}/api/admin/subscriptions`, { headers: authHeader() })
+}
+
+export function adminCreateSubscription(payload) {
+  return request(`${API_URL}/api/admin/subscriptions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function adminDeleteSubscription(id) {
+  return request(`${API_URL}/api/admin/subscriptions/${id}`, {
+    method: 'DELETE',
+    headers: authHeader(),
+  })
+}

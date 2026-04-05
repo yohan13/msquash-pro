@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { selectOne, selectAll, run, saveDb, uid } from "../db.js";
 import { auth, adminOnly } from "../middleware/auth.js";
+import { CARD_TYPES } from "../config.js";
 
 const router = Router();
 router.use(auth, adminOnly);
@@ -175,7 +176,66 @@ router.get("/admin/stats", (req, res) => {
     [thirtyDaysAgo]
   );
 
-  res.json({ totalBookings, totalUsers, totalBlocks, futureBookings, bookingsPerCourt, topUsers, last30days });
+  const totalSubscriptions = selectOne("SELECT COUNT(*) as c FROM subscriptions")?.c || 0;
+  const activeSubscriptions = selectOne(
+    "SELECT COUNT(*) as c FROM subscriptions WHERE expires_at >= ? AND used_units < total_units",
+    [new Date().toISOString().slice(0, 10)]
+  )?.c || 0;
+
+  res.json({ totalBookings, totalUsers, totalBlocks, futureBookings, bookingsPerCourt, topUsers, last30days, totalSubscriptions, activeSubscriptions });
+});
+
+// ─── Abonnements ──────────────────────────────────────────────────────────────
+
+// GET /api/admin/subscriptions
+router.get("/admin/subscriptions", (req, res) => {
+  const subs = selectAll(
+    `SELECT s.*, u.name as user_name, u.email as user_email
+     FROM subscriptions s JOIN users u ON u.id = s.user_id
+     ORDER BY s.purchased_at DESC`
+  );
+  res.json({ subscriptions: subs, cardTypes: CARD_TYPES });
+});
+
+// POST /api/admin/subscriptions  — créditer une carte à un membre
+router.post("/admin/subscriptions", (req, res) => {
+  const { userId, cardType } = req.body || {};
+
+  if (!userId) return res.status(400).json({ error: "MISSING_USER" });
+  if (!CARD_TYPES[cardType]) return res.status(400).json({ error: "INVALID_CARD_TYPE" });
+
+  const user = selectOne("SELECT id FROM users WHERE id = ?", [userId]);
+  if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
+
+  const card = CARD_TYPES[cardType];
+  const purchasedAt = new Date().toISOString();
+  const expiresAt   = new Date(Date.now() + card.validMonths * 30 * 24 * 3600 * 1000)
+                        .toISOString().slice(0, 10);
+
+  const id = uid("sub");
+  run(
+    `INSERT INTO subscriptions (id, user_id, card_type, total_units, used_units, purchased_at, expires_at)
+     VALUES (?, ?, ?, ?, 0, ?, ?)`,
+    [id, userId, cardType, card.units, purchasedAt, expiresAt]
+  );
+  saveDb();
+
+  const sub = selectOne(
+    `SELECT s.*, u.name as user_name, u.email as user_email
+     FROM subscriptions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
+    [id]
+  );
+  res.status(201).json({ subscription: sub });
+});
+
+// DELETE /api/admin/subscriptions/:id
+router.delete("/admin/subscriptions/:id", (req, res) => {
+  const sub = selectOne("SELECT id FROM subscriptions WHERE id = ?", [req.params.id]);
+  if (!sub) return res.status(404).json({ error: "NOT_FOUND" });
+  run("DELETE FROM booking_units WHERE subscription_id = ?", [req.params.id]);
+  run("DELETE FROM subscriptions WHERE id = ?", [req.params.id]);
+  saveDb();
+  res.json({ ok: true });
 });
 
 export default router;

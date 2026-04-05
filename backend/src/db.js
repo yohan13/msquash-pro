@@ -39,15 +39,18 @@ CREATE TABLE IF NOT EXISTS courts (
   name TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS bookings (
-  id        TEXT PRIMARY KEY,
-  date      TEXT NOT NULL,
-  time      TEXT NOT NULL,
-  court_id  INTEGER NOT NULL,
-  user_id   TEXT NOT NULL,
-  note      TEXT,
-  created_at TEXT NOT NULL,
+  id          TEXT PRIMARY KEY,
+  date        TEXT NOT NULL,
+  time        TEXT NOT NULL,
+  court_id    INTEGER NOT NULL,
+  user_id     TEXT NOT NULL,
+  note        TEXT,
+  created_at  TEXT NOT NULL,
+  player2_id   TEXT,
+  player2_name TEXT,
   UNIQUE(date, time, court_id),
-  FOREIGN KEY(user_id) REFERENCES users(id)
+  FOREIGN KEY(user_id)   REFERENCES users(id),
+  FOREIGN KEY(player2_id) REFERENCES users(id)
 );
 CREATE TABLE IF NOT EXISTS blocks (
   id        TEXT PRIMARY KEY,
@@ -57,7 +60,32 @@ CREATE TABLE IF NOT EXISTS blocks (
   reason    TEXT,
   UNIQUE(date, time, court_id)
 );
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  card_type   TEXT NOT NULL,
+  total_units INTEGER NOT NULL,
+  used_units  INTEGER NOT NULL DEFAULT 0,
+  purchased_at TEXT NOT NULL,
+  expires_at   TEXT NOT NULL,
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS booking_units (
+  id              TEXT PRIMARY KEY,
+  booking_id      TEXT NOT NULL,
+  subscription_id TEXT NOT NULL,
+  units_used      INTEGER NOT NULL,
+  FOREIGN KEY(booking_id)      REFERENCES bookings(id),
+  FOREIGN KEY(subscription_id) REFERENCES subscriptions(id)
+);
 `);
+
+// Migration : ajouter les colonnes player2 si elles n'existent pas (DB existante)
+{
+  const cols = selectAll("PRAGMA table_info(bookings)").map(c => c.name);
+  if (!cols.includes("player2_id"))   db.run("ALTER TABLE bookings ADD COLUMN player2_id TEXT");
+  if (!cols.includes("player2_name")) db.run("ALTER TABLE bookings ADD COLUMN player2_name TEXT");
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

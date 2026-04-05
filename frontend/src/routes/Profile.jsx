@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { updateProfile } from '../api'
+import { updateProfile, mySubscriptions } from '../api'
 import Banner from '../components/Banner'
 import { useBanner } from '../hooks/useBanner'
 import MyBookings from '../components/MyBookings'
@@ -13,8 +13,14 @@ export default function Profile() {
 
   const [nameForm, setNameForm] = useState({ name: user?.name || '' })
   const [pwForm, setPwForm]     = useState({ currentPassword: '', newPassword: '', confirm: '' })
-  const [busyName, setBusyName] = useState(false)
-  const [busyPw, setBusyPw]     = useState(false)
+  const [busyName, setBusyName]   = useState(false)
+  const [busyPw, setBusyPw]       = useState(false)
+  const [subscriptions, setSubs]  = useState([])
+
+  useEffect(() => {
+    if (!user) return
+    mySubscriptions().then(r => setSubs(r.subscriptions || [])).catch(() => {})
+  }, [user])
 
   if (!user) {
     navigate('/')
@@ -134,7 +140,51 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Booking history */}
+      {/* Abonnements */}
+      <div className="card">
+        <div className="card-header"><h2 className="font-semibold text-sm">Mes cartes & abonnements</h2></div>
+        <div className="card-body">
+          {subscriptions.length === 0 ? (
+            <p className="text-sm text-ink-muted">Aucune carte active. Contactez le club pour en acheter une.</p>
+          ) : (
+            <div className="space-y-3">
+              {subscriptions.map(s => {
+                const today = new Date().toISOString().slice(0, 10)
+                const remaining = s.total_units - s.used_units
+                const expired = s.expires_at < today
+                const empty   = remaining <= 0
+                const pct     = Math.round((remaining / s.total_units) * 100)
+                const cardLabel = s.card_type
+                  .replace('CARD_', 'Carte ')
+                  .replace('FORFAIT_CLUB', 'Forfait Club')
+                  .replace('_', ' ')
+                return (
+                  <div key={s.id} className={`rounded-xl border p-4 ${expired || empty ? 'opacity-50' : ''}`}
+                       style={{ borderColor: 'var(--border)' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <span className="font-semibold text-sm">{cardLabel}</span>
+                        {expired && <span className="ml-2 chip text-xs bg-red-100 text-red-600">Expirée</span>}
+                        {empty   && !expired && <span className="ml-2 chip text-xs bg-orange-100 text-orange-600">Épuisée</span>}
+                        {!expired && !empty  && <span className="ml-2 chip text-xs bg-green-100 text-green-700">Active</span>}
+                      </div>
+                      <span className="text-sm font-bold text-brand">{remaining} / {s.total_units} séances</span>
+                    </div>
+                    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--panel-alt)' }}>
+                      <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="text-xs text-ink-muted mt-1">
+                      {s.used_units} utilisée{s.used_units > 1 ? 's' : ''} · Expire le {s.expires_at}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Réservations */}
       <div className="card">
         <div className="card-header"><h2 className="font-semibold text-sm">Mes réservations</h2></div>
         <div className="card-body">

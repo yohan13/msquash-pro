@@ -7,7 +7,7 @@
  */
 import bcrypt from "bcryptjs";
 import { selectOne, selectAll, run, saveDb, uid, db } from "./db.js";
-import { config } from "./config.js";
+import { config, CARD_TYPES } from "./config.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,14 +48,14 @@ const USERS = [
 
 console.log("🌱  Seeding demo data...");
 
-// Skip if already seeded (check non-admin users count)
+// Skip user+booking creation if already seeded
 const existingUsers = selectOne("SELECT COUNT(*) as c FROM users WHERE role = 'USER'")?.c || 0;
-if (existingUsers >= 5) {
-  console.log("✅  Données déjà présentes — skip.");
-  process.exit(0);
-}
+const skipUsersAndBookings = existingUsers >= 5;
+if (skipUsersAndBookings) console.log("   Utilisateurs et réservations déjà présents — skip partiel.");
 
-// Create users
+// ─── Users + Bookings + Blocks (skip si déjà présents) ───────────────────────
+
+// Toujours charger les userIds (nécessaire pour les abonnements et player2)
 const userIds = {};
 for (const u of USERS) {
   const existing = selectOne("SELECT id FROM users WHERE email = ?", [u.email]);
@@ -68,10 +68,10 @@ for (const u of USERS) {
   );
   userIds[u.email] = id;
 }
-saveDb();
-console.log(`   ${USERS.length} utilisateurs créés.`);
-
-// ─── Bookings ─────────────────────────────────────────────────────────────────
+if (!skipUsersAndBookings) {
+  saveDb();
+  console.log(`   ${USERS.length} utilisateurs créés.`);
+}
 
 const memberEmails = USERS.filter((u) => u.role === "USER").map((u) => u.email);
 const courts = selectAll("SELECT id FROM courts ORDER BY id");
@@ -79,6 +79,7 @@ const slots  = genSlots(config.DAY_START, config.DAY_END, config.SLOT_MINUTES);
 const todayStr = today();
 
 let bookingCount = 0;
+if (!skipUsersAndBookings) {
 
 // Past bookings: 60 days
 for (let dayOffset = -60; dayOffset < 0; dayOffset++) {
@@ -185,18 +186,83 @@ for (const blockDef of blocks) {
 saveDb();
 console.log(`   ${blockCount} créneaux bloqués créés.`);
 
+} // end !skipUsersAndBookings
+
+// ─── Abonnements démo ─────────────────────────────────────────────────────────
+
+const existingSubs = selectOne("SELECT COUNT(*) as c FROM subscriptions")?.c || 0;
+let subCount = 0;
+
+if (existingSubs === 0) {
+  // Distribution réaliste des cartes parmi les membres
+  const subDefs = [
+    { email: "thomas.martin@club.local",   cardType: "CARD_24",      usedFraction: 0.6 },
+    { email: "julie.bernard@club.local",   cardType: "CARD_16",      usedFraction: 0.3 },
+    { email: "pierre.leclerc@club.local",  cardType: "CARD_8",       usedFraction: 0.9 },
+    { email: "sarah.lefebvre@club.local",  cardType: "FORFAIT_CLUB", usedFraction: 0.4 },
+    { email: "lucas.moreau@club.local",    cardType: "CARD_16",      usedFraction: 0.1 },
+    { email: "emma.petit@club.local",      cardType: "CARD_24",      usedFraction: 0.5 },
+    // antoine et marie n'ont pas de carte (paiement à la séance)
+  ];
+
+  for (const def of subDefs) {
+    const user = selectOne("SELECT id FROM users WHERE email = ?", [def.email]);
+    if (!user) continue;
+    const card = CARD_TYPES[def.cardType];
+    const usedUnits = Math.floor(card.units * def.usedFraction);
+    const purchasedAt = new Date(Date.now() - Math.random() * 90 * 86400000).toISOString();
+    const expiresAt   = new Date(Date.now() + card.validMonths * 30 * 24 * 3600 * 1000)
+                          .toISOString().slice(0, 10);
+    const id = uid("sub");
+    run(
+      `INSERT INTO subscriptions (id, user_id, card_type, total_units, used_units, purchased_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id, user.id, def.cardType, card.units, usedUnits, purchasedAt, expiresAt]
+    );
+    subCount++;
+  }
+  saveDb();
+}
+console.log(`   ${subCount > 0 ? subCount : "déjà présents"} abonnements créés.`);
+
+// ─── Player2 sur les réservations récentes ────────────────────────────────────
+
+const recentBookings = selectAll(
+  `SELECT id, user_id FROM bookings
+   WHERE player2_id IS NULL AND player2_name IS NULL
+   ORDER BY date DESC LIMIT 60`
+);
+
+let p2Count = 0;
+const memberIds = USERS.filter(u => u.role === "USER")
+  .map(u => selectOne("SELECT id FROM users WHERE email = ?", [u.email])?.id)
+  .filter(Boolean);
+
+for (const b of recentBookings) {
+  if (Math.random() > 0.6) continue; // 40% des réservations ont un player2
+  const otherMembers = memberIds.filter(id => id !== b.user_id);
+  if (!otherMembers.length) continue;
+  const p2Id = otherMembers[Math.floor(Math.random() * otherMembers.length)];
+  run("UPDATE bookings SET player2_id = ? WHERE id = ?", [p2Id, b.id]);
+  p2Count++;
+}
+saveDb();
+console.log(`   ${p2Count} réservations mises à jour avec un adversaire.`);
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 const stats = {
   users:    selectOne("SELECT COUNT(*) as c FROM users")?.c,
   bookings: selectOne("SELECT COUNT(*) as c FROM bookings")?.c,
   blocks:   selectOne("SELECT COUNT(*) as c FROM blocks")?.c,
+  subs:     selectOne("SELECT COUNT(*) as c FROM subscriptions")?.c,
 };
 
 console.log(`\n✅  Données de démo chargées :`);
 console.log(`   👤 ${stats.users} utilisateurs`);
 console.log(`   📅 ${stats.bookings} réservations`);
 console.log(`   🚫 ${stats.blocks} créneaux bloqués`);
+console.log(`   🎫 ${stats.subs} abonnements`);
 console.log(`\n   Logins démo :`);
 console.log(`   admin@club.local    / ${config.ADMIN_SEED_PASSWORD}  (Admin)`);
 USERS.forEach((u) => console.log(`   ${u.email.padEnd(32)} / Test1234!`));

@@ -65,7 +65,10 @@ export default function MyBookings({ user, refresh }) {
                     {new Date(b.date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
                     {' '} à {b.time}
                   </span>
-                  <span className="text-xs text-ink-muted ml-2">Court {b.court_id}</span>
+                  <span className="text-xs text-ink-muted ml-2">{b.court_name || `Court ${b.court_id}`}</span>
+                  {(b.player2_member_name || b.player2_name) && (
+                    <span className="text-xs text-brand ml-2">vs {b.player2_member_name || b.player2_name}</span>
+                  )}
                   {b.note && <span className="text-xs text-ink-muted ml-2">· {b.note}</span>}
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -84,10 +87,13 @@ export default function MyBookings({ user, refresh }) {
           <h4 className="text-xs font-semibold text-ink-muted uppercase tracking-wide mb-2">Historique</h4>
           <ul className="space-y-1">
             {past.slice(0, 10).map(b => (
-              <li key={b.id} className="flex items-center justify-between text-sm text-ink-muted px-3 py-1.5 rounded-lg hover:bg-gray-50">
+              <li key={b.id} className="flex items-center justify-between text-sm text-ink-muted px-3 py-1.5 rounded-lg hover:bg-[var(--panel-alt)]">
                 <span>
                   {new Date(b.date + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  {' '} à {b.time} — Court {b.court_id}
+                  {' '} à {b.time} — {b.court_name || `Court ${b.court_id}`}
+                  {(b.player2_member_name || b.player2_name) && (
+                    <span className="ml-1">vs {b.player2_member_name || b.player2_name}</span>
+                  )}
                 </span>
                 <a className="btn btn-soft px-2 py-1 text-xs" href={bookingICSUrl(b.id)}>.ics</a>
               </li>

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { adminGetUsers, adminGetStats, adminUpdateRole, adminResetPassword, adminDeleteUser } from '../api'
+import { adminGetUsers, adminGetStats, adminUpdateRole, adminResetPassword, adminDeleteUser,
+         adminGetSubscriptions, adminCreateSubscription, adminDeleteSubscription } from '../api'
 import Banner from '../components/Banner'
 import Modal from '../components/Modal'
 import { useBanner } from '../hooks/useBanner'
@@ -19,6 +20,13 @@ export default function Admin() {
   const [toDelete, setToDelete]     = useState(null)
   const [resetTarget, setReset]     = useState(null)
   const [newPassword, setNewPw]     = useState('')
+
+  // Subscriptions
+  const [subs, setSubs]           = useState([])
+  const [subUsers, setSubUsers]   = useState([])
+  const [cardTypes, setCardTypes] = useState({})
+  const [newSub, setNewSub]       = useState({ userId: '', cardType: '' })
+  const [subToDelete, setSubToDelete] = useState(null)
 
   if (!user || user.role !== 'ADMIN') {
     navigate('/')
@@ -39,9 +47,24 @@ export default function Admin() {
     finally { setLoading(false) }
   }
 
+  async function loadSubs() {
+    setLoading(true)
+    try {
+      const r = await adminGetSubscriptions()
+      setSubs(r.subscriptions || [])
+      setCardTypes(r.cardTypes || {})
+      // Récupérer la liste des membres pour le formulaire
+      const ru = await adminGetUsers()
+      setSubUsers((ru.users || []).filter(u => u.role === 'USER'))
+    }
+    catch (e) { setBanner('error', 'Erreur chargement abonnements.') }
+    finally { setLoading(false) }
+  }
+
   useEffect(() => {
     if (tab === 'stats') loadStats()
-    else loadUsers()
+    else if (tab === 'users') loadUsers()
+    else if (tab === 'subs') loadSubs()
   }, [tab])
 
   async function handleRoleToggle(u) {
@@ -85,7 +108,7 @@ export default function Admin() {
     <main className="max-w-5xl mx-auto px-4 py-8 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold">Administration</h1>
-        <div className="toolbar">{tabBtn('stats', '📊 Statistiques')}{tabBtn('users', '👥 Membres')}</div>
+        <div className="toolbar">{tabBtn('stats', '📊 Statistiques')}{tabBtn('users', '👥 Membres')}{tabBtn('subs', '🎫 Abonnements')}</div>
       </div>
 
       {banner && <Banner banner={banner} onClose={clearBanner} />}
@@ -182,6 +205,121 @@ export default function Admin() {
               </div>
             </div>
           )}
+        </>
+      )}
+
+      {/* ─── Abonnements ─── */}
+      {tab === 'subs' && (
+        loading ? <div className="text-ink-muted text-sm">Chargement…</div> :
+        <>
+          {/* Formulaire ajout */}
+          <div className="card">
+            <div className="card-header"><h2 className="font-semibold text-sm">Créditer une carte</h2></div>
+            <div className="card-body">
+              <form className="flex flex-wrap gap-3 items-end"
+                    onSubmit={async e => {
+                      e.preventDefault()
+                      if (!newSub.userId || !newSub.cardType) return
+                      try {
+                        await adminCreateSubscription(newSub)
+                        setBanner('success', 'Carte créditée.')
+                        setNewSub({ userId: '', cardType: '' })
+                        await loadSubs()
+                      } catch { setBanner('error', 'Erreur lors du crédit.') }
+                    }}>
+                <div>
+                  <label className="text-xs font-medium block mb-1">Membre</label>
+                  <select className="field" value={newSub.userId} onChange={e => setNewSub(s => ({ ...s, userId: e.target.value }))}>
+                    <option value="">— Choisir —</option>
+                    {subUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium block mb-1">Type de carte</label>
+                  <select className="field" value={newSub.cardType} onChange={e => setNewSub(s => ({ ...s, cardType: e.target.value }))}>
+                    <option value="">— Choisir —</option>
+                    {Object.entries(cardTypes).map(([key, ct]) => (
+                      <option key={key} value={key}>{ct.label} — {ct.units} séances — {ct.price}€</option>
+                    ))}
+                  </select>
+                </div>
+                <button type="submit" className="btn btn-primary">Créditer</button>
+              </form>
+            </div>
+          </div>
+
+          {/* Liste des abonnements */}
+          <div className="card">
+            <div className="card-header flex items-center justify-between">
+              <h2 className="font-semibold text-sm">{subs.length} abonnement(s)</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-xs text-ink-muted" style={{ background: 'var(--panel-alt)' }}>
+                    <th className="px-4 py-3 text-left font-medium">Membre</th>
+                    <th className="px-4 py-3 text-left font-medium">Carte</th>
+                    <th className="px-4 py-3 text-center font-medium">Solde</th>
+                    <th className="px-4 py-3 text-center font-medium">Progression</th>
+                    <th className="px-4 py-3 text-center font-medium">Expiration</th>
+                    <th className="px-4 py-3 text-center font-medium">Statut</th>
+                    <th className="px-4 py-3 text-center font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subs.map(s => {
+                    const today     = new Date().toISOString().slice(0, 10)
+                    const remaining = s.total_units - s.used_units
+                    const expired   = s.expires_at < today
+                    const empty     = remaining <= 0
+                    const pct       = Math.round((remaining / s.total_units) * 100)
+                    const cardLabel = s.card_type.replace('CARD_', 'Carte ').replace('FORFAIT_CLUB', 'Forfait Club').replace('_', ' ')
+                    return (
+                      <tr key={s.id} className="border-b hover:bg-[var(--panel-alt)] transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{s.user_name}</div>
+                          <div className="text-xs text-ink-muted">{s.user_email}</div>
+                        </td>
+                        <td className="px-4 py-3">{cardLabel}</td>
+                        <td className="px-4 py-3 text-center font-semibold text-brand">{remaining} / {s.total_units}</td>
+                        <td className="px-4 py-3 w-32">
+                          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--panel-alt)' }}>
+                            <div className="h-full bg-brand rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center text-ink-muted text-xs">{s.expires_at}</td>
+                        <td className="px-4 py-3 text-center">
+                          {expired ? <span className="chip bg-red-100 text-red-600 text-xs">Expirée</span>
+                           : empty ? <span className="chip bg-orange-100 text-orange-600 text-xs">Épuisée</span>
+                           : <span className="chip bg-green-100 text-green-700 text-xs">Active</span>}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {subToDelete?.id === s.id ? (
+                            <div className="flex gap-1 justify-center">
+                              <button type="button" className="btn text-xs px-2 py-1 bg-red-500 text-white border-transparent"
+                                      onClick={async () => {
+                                        try { await adminDeleteSubscription(s.id); await loadSubs(); setBanner('success', 'Abonnement supprimé.') }
+                                        catch { setBanner('error', 'Erreur suppression.') }
+                                        setSubToDelete(null)
+                                      }}>Confirmer</button>
+                              <button type="button" className="btn btn-outline text-xs px-2 py-1"
+                                      onClick={() => setSubToDelete(null)}>Annuler</button>
+                            </div>
+                          ) : (
+                            <button type="button" className="btn btn-outline text-xs px-2 py-1 text-red-500"
+                                    onClick={() => setSubToDelete(s)}>Supprimer</button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              {subs.length === 0 && (
+                <div className="text-center py-8 text-ink-muted text-sm">Aucun abonnement.</div>
+              )}
+            </div>
+          </div>
         </>
       )}
 

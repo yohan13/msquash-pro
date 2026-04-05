@@ -36,3 +36,12 @@ export const config = {
   ADMIN_SEED_PASSWORD: process.env.ADMIN_SEED_PASSWORD || "admin1234",
   ADMIN_SEED_NAME:     process.env.ADMIN_SEED_NAME     || "Club Admin",
 };
+
+// Carte d'abonnement : 1 unité = 1 séance par personne
+// 1 créneau réservé = 2 unités au total (1 par joueur, ou 2 sur une seule carte)
+export const CARD_TYPES = {
+  CARD_8:       { label: "Carte 8 séances",  units: 8,  price: 85,  validMonths: 12 },
+  CARD_16:      { label: "Carte 16 séances", units: 16, price: 155, validMonths: 12 },
+  CARD_24:      { label: "Carte 24 séances", units: 24, price: 215, validMonths: 12 },
+  FORFAIT_CLUB: { label: "Forfait Club",     units: 65, price: 600, validMonths: 12 },
+};

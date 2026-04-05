@@ -54,7 +54,7 @@ export function getConfig() {
 }
 
 export function getDay(date) {
-  return request(`${API_URL}/api/slots?date=${encodeURIComponent(date)}`)
+  return request(`${API_URL}/api/slots?date=${encodeURIComponent(date)}`, { headers: authHeader() })
 }
 
 // ─── Bookings ─────────────────────────────────────────────────────────────────
